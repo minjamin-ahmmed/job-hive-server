@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -35,22 +35,60 @@ async function run() {
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
 
-
     //Jobs Related API
-    const jobsCollection = client.db("job-hive").collection("jobs")
+    const jobsCollection = client.db("job-hive").collection("jobs");
+    const jobApplicationCollection = client
+      .db("job-hive")
+      .collection("job-application");
 
-
-    app.get("/jobs", async(req, res) => {
+    app.get("/jobs", async (req, res) => {
       const query = req.query;
-      const cursor = jobsCollection.find(query)
-      const jobs = await cursor.toArray()
-      res.send(jobs)
-    })
+      const cursor = jobsCollection.find(query);
+      const jobs = await cursor.toArray();
+      res.send(jobs);
+    });
 
+    app.get("/jobs/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await jobsCollection.findOne(query);
+      res.send(result);
+    });
 
+    app.post("/jobs", async (req, res) => {
+      const job = req.body;
+      const result = await jobsCollection.insertOne(job);
+      res.send(result);
+    });
 
+    // Job Application API
+    app.get("/job-applications", async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const result = await jobApplicationCollection.find(query).toArray();
 
+      // Aggregate data (Not Best way to do it)
+      for (const applications of result) {
+        console.log("fsrdg", applications.jobId);
+        const query1 = { _id: new ObjectId(applications.jobId) };
+        const job = await jobsCollection.findOne(query1);
+        if (job) {
+          applications.title = job.title;
+          applications.location = job.location;
+          applications.company = job.company;
+          applications.company_logo = job.company_logo;
+          applications.applicationDeadline = job.applicationDeadline;
+        }
+      }
 
+      res.send(result);
+    });
+
+    app.post("/job-applications", async (req, res) => {
+      const jobApplication = req.body;
+      const result = await jobApplicationCollection.insertOne(jobApplication);
+      res.send(result);
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
