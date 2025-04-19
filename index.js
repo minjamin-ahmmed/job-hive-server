@@ -1,12 +1,21 @@
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
 
-app.use(cors());
+// Middleware
+app.use(
+  cors({
+    origin: ["http://localhost:5174"],
+    credentials: true,
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.pinqi.mongodb.net/job-hive?retryWrites=true&w=majority`;
 
@@ -35,6 +44,20 @@ async function run() {
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
 
+    // Auth Related API
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACEESS_TOKEN_SECRET, {
+        expiresIn: "1h",
+      });
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: false,
+        })
+        .send({ success: true });
+    });
+
     //Jobs Related API
     const jobsCollection = client.db("job-hive").collection("jobs");
     const jobApplicationCollection = client
@@ -42,7 +65,11 @@ async function run() {
       .collection("job-application");
 
     app.get("/jobs", async (req, res) => {
-      const query = req.query;
+      const email = req.query.email;
+      let query = {};
+      if (email) {
+        query = { hr_email: email };
+      }
       const cursor = jobsCollection.find(query);
       const jobs = await cursor.toArray();
       res.send(jobs);
@@ -64,7 +91,11 @@ async function run() {
     // Job Application API
     app.get("/job-applications", async (req, res) => {
       const email = req.query.email;
+
       const query = { email: email };
+
+      console.log("COOKIES", req.cookies);
+
       const result = await jobApplicationCollection.find(query).toArray();
 
       // Aggregate data (Not Best way to do it)
