@@ -10,12 +10,31 @@ const port = process.env.PORT || 5000;
 // Middleware
 app.use(
   cors({
-    origin: ["http://localhost:5174"],
+    origin: ["http://localhost:5173"],
     credentials: true,
   })
 );
 app.use(express.json());
 app.use(cookieParser());
+
+const logger = (req, res, next) => {
+  console.log("log Info");
+  next();
+};
+
+const verifyToken = (req, res, next) => {
+  const token = req.cookies?.token;
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized Access" });
+  }
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "Unauthorized Access" });
+    }
+    next();
+  });
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.pinqi.mongodb.net/job-hive?retryWrites=true&w=majority`;
 
@@ -47,7 +66,7 @@ async function run() {
     // Auth Related API
     app.post("/jwt", (req, res) => {
       const user = req.body;
-      const token = jwt.sign(user, process.env.ACEESS_TOKEN_SECRET, {
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "1h",
       });
       res
@@ -64,7 +83,7 @@ async function run() {
       .db("job-hive")
       .collection("job-application");
 
-    app.get("/jobs", async (req, res) => {
+    app.get("/jobs", logger, async (req, res) => {
       const email = req.query.email;
       let query = {};
       if (email) {
@@ -89,12 +108,12 @@ async function run() {
     });
 
     // Job Application API
-    app.get("/job-applications", async (req, res) => {
+    app.get("/job-applications", verifyToken, async (req, res) => {
       const email = req.query.email;
 
       const query = { email: email };
 
-      console.log("COOKIES", req.cookies);
+      console.log("COOKIES Cookies", req.cookies);
 
       const result = await jobApplicationCollection.find(query).toArray();
 
